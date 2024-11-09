@@ -1,0 +1,153 @@
+---
+title: "05_models_stat_learn"
+author: "Flora Hann"
+date: "2024-11-07"
+output: html_document
+---
+
+# setup and loading packages
+```{r}
+options(scipen = 999, digits = 15)
+
+suppressPackageStartupMessages(library(janitor))
+suppressPackageStartupMessages(library(performance))
+suppressPackageStartupMessages(library(sjPlot))
+suppressPackageStartupMessages(library(afex))
+suppressPackageStartupMessages(library(emmeans))
+suppressPackageStartupMessages(library(tidyverse))
+```
+
+# importing data
+```{r}
+# ASRT
+rt_ls <- read_csv("processed_data/asrt_ls_binwise_rt_long.csv", show_col_types = F)
+acc_ls <- read_csv("processed_data/asrt_ls_binwise_acc_long.csv", show_col_types = F)
+
+# AQ
+id_aq <- read_csv("processed_data/id_aq.csv", show_col_types = F)
+```
+
+# reaction time - model for statistical learning
+## converting bin variable to factor
+```{r}
+rt_ls <- rt_ls %>% 
+  mutate(
+    bin = factor(bin)
+  ) %>%
+  left_join(id_aq, by = "id") %>% 
+  select(id, aq_sum, bin, ls_binwise_rt)
+```
+
+# centering AQ
+```{r}
+rt_ls <- rt_ls %>% 
+  mutate(
+    aq_centered = scale(aq_sum, center = T, scale = F)
+  )
+```
+
+# model
+```{r}
+# filtering for bins 1-3
+rt_ls_stat_learn <- rt_ls %>% 
+  filter(bin == 1 | bin == 2 | bin == 3) %>% 
+  mutate(bin = relevel(bin, ref = 1))
+
+# fitting model
+rt_ls_stat_learn_model <- 
+  mixed(ls_binwise_rt ~ bin * aq_centered + (1 | id), data = rt_ls_stat_learn, method = "S", check_contrasts = F)
+rt_ls_stat_learn_model
+summary(rt_ls_stat_learn_model$full_model)
+
+tab_model(rt_ls_stat_learn_model$full_model,
+          df.method = "s",
+          show.se = F,
+          show.stat = T,
+          show.df = T,
+          digits = 3,
+          digits.re = 3,
+          string.pred = "Terms",
+          string.est = "b",
+          string.ci = "95% CI",
+          string.stat = "t",
+          col.order = c("est", "se", "ci", "stat", "df.error", "p")
+)
+
+# post hoc
+emm_options(lmer.df = "Satterthwaite", lmerTest.limit = 290682)
+
+  ## bin main effet
+  emm_bin <- emmeans(rt_ls_stat_learn_model, ~ bin, type = 'response')
+  emm_bin
+  pairs(regrid(emm_bin), adjust = "sidak")
+
+# assumptions
+car::qqPlot(resid(rt_ls_stat_learn_model$full_model))
+plot(rt_ls_stat_learn_model$full_model)
+plot_model(rt_ls_stat_learn_model$full_model, type = "diag")
+check_normality(rt_ls_stat_learn_model$full_model)
+check_collinearity(rt_ls_stat_learn_model$full_model)
+```
+
+# accuracy - model for statistical learning
+## converting bin variable to factor
+```{r}
+acc_ls <- acc_ls %>% 
+  mutate(
+    bin = factor(bin)
+  ) %>%
+  left_join(id_aq, by = "id") %>% 
+  select(id, aq_sum, bin, ls_binwise_acc)
+```
+
+# centering AQ
+```{r}
+acc_ls <- acc_ls %>% 
+  mutate(
+    aq_centered = scale(aq_sum, center = T, scale = F)
+  )
+```
+
+# model
+```{r}
+# filtering for bins 1-3
+acc_ls_stat_learn <- acc_ls %>% 
+  filter(bin == 1 | bin == 2 | bin == 3) %>% 
+  mutate(bin = relevel(bin, ref = 1))
+
+# fitting model
+acc_ls_stat_learn_model <- 
+  mixed(ls_binwise_acc ~ bin * aq_centered + (1 | id), data = acc_ls_stat_learn, method = "S", check_contrasts = F)
+acc_ls_stat_learn_model
+summary(acc_ls_stat_learn_model$full_model)
+
+tab_model(acc_ls_stat_learn_model$full_model,
+          df.method = "s",
+          show.se = F,
+          show.stat = T,
+          show.df = T,
+          digits = 3,
+          digits.re = 3,
+          string.pred = "Terms",
+          string.est = "b",
+          string.ci = "95% CI",
+          string.stat = "t",
+          col.order = c("est", "se", "ci", "stat", "df.error", "p")
+)
+
+# post hoc
+emm_options(lmer.df = "Satterthwaite", lmerTest.limit = 290682)
+
+  ## bin main effet
+  emm_bin <- emmeans(acc_ls_stat_learn_model, ~ bin, type = 'response')
+  emm_bin
+  pairs(regrid(emm_bin), adjust = "sidak")
+
+# assumptions
+car::qqPlot(resid(acc_ls_stat_learn_model$full_model))
+plot(acc_ls_stat_learn_model$full_model)
+plot_model(acc_ls_stat_learn_model$full_model, type = "diag")
+check_normality(acc_ls_stat_learn_model$full_model)
+check_collinearity(acc_ls_stat_learn_model$full_model)
+```
+

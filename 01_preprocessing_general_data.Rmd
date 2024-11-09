@@ -1,0 +1,165 @@
+---
+title: "01_preprocessing_general_data"
+author: "Flora Hann"
+date: "2023-11-16"
+output: html_document
+---
+
+# setup and loading packages
+```{r}
+options(scipen = 999, digits = 15)
+
+suppressPackageStartupMessages(library(janitor))
+suppressPackageStartupMessages(library(tidyverse))
+```
+
+# importing data
+```{r}
+# general
+general <- read_csv("raw_data/general.csv", show_col_types = F) %>% clean_names()
+```
+
+# recoding variables
+```{r}
+# age
+general <- general %>% 
+  mutate(
+    age =
+      if_else(
+        age_year < 18,
+        NA,
+        age_year
+      )
+    ) %>% 
+  mutate(
+    age =
+      if_else(
+        age_month > 6,
+        age + 1,
+        age
+      )
+  ) %>% 
+  select(id, gender, age, everything(), -age_year, -age_month)
+
+# gender
+general <- general %>% 
+  mutate(
+    gender = factor(gender, levels = c(1, 2), labels = c("female","male"))
+  )
+
+# diagnoses
+## asd
+general <- general %>% 
+  mutate(
+      asd =
+        if_else(
+          is.na(psychiatric_diagnoses_1),
+          F,
+          T
+        )
+  )
+
+## adhd
+general <- general %>% 
+  mutate(
+      adhd =
+        if_else(
+          is.na(psychiatric_diagnoses_2),
+          F,
+          T
+        )
+  )
+
+## gts
+general <- general %>% 
+  mutate(
+      gts =
+        if_else(
+          is.na(psychiatric_diagnoses_3),
+          F,
+          T
+        )
+  )
+
+## ocd
+general <- general %>% 
+  mutate(
+      ocd =
+        if_else(
+          is.na(psychiatric_diagnoses_4),
+          F,
+          T
+        )
+  )
+
+## scz
+general <- general %>% 
+  mutate(
+      scz =
+        if_else(
+          is.na(psychiatric_diagnoses_5),
+          F,
+          T
+        )
+  )
+
+## mood
+general <- general %>% 
+  mutate(
+      mood =
+        if_else(
+          is.na(psychiatric_diagnoses_6),
+          F,
+          T
+        )
+  )
+
+## anxiety
+general <- general %>% 
+  mutate(
+      anxiety =
+        if_else(
+          is.na(psychiatric_diagnoses_7),
+          F,
+          T
+        )
+  )
+
+## ed
+general <- general %>% 
+  mutate(
+      ed =
+        if_else(
+          is.na(psychiatric_diagnoses_8),
+          F,
+          T
+        )
+  )
+
+## pd
+general <- general %>% 
+  mutate(
+      pd =
+        if_else(
+          is.na(psychiatric_diagnoses_9),
+          F,
+          T
+        )
+  )
+
+## other
+general <- general %>% 
+  mutate(
+      other =
+        if_else(
+          is.na(psychiatric_diagnoses_text),
+          F,
+          T
+        )
+  )
+
+general <- general %>%
+  select(id, gender, age, asd:other)
+
+general %>% write.csv("processed_data/general.csv", row.names = F)
+```

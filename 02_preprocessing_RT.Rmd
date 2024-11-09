@@ -1,0 +1,267 @@
+---
+title: "02_preprocessing_RT"
+author: "Flora Hann"
+date: "2023-09-26"
+output: html_document
+---
+
+# setup and loading packages
+```{r}
+options(scipen = 999, digits = 15)
+
+suppressPackageStartupMessages(library(janitor))
+suppressPackageStartupMessages(library(tidyverse))
+```
+
+# importing data
+```{r}
+# ASRT
+asrt_bins1_2 <- read_csv("raw_data/asrt_bins1_2.csv", show_col_types = F) %>% clean_names()
+asrt_bins3_4 <- read_csv("raw_data/asrt_bins3_4.csv", show_col_types = F) %>% clean_names() 
+asrt_bins5_6 <- read_csv("raw_data/asrt_bins5_6.csv", show_col_types = F) %>% clean_names() 
+
+# AQ
+aq_raw <- read_csv("raw_data/AQ.csv", show_col_types = F)
+
+# general
+general <- read_csv("processed_data/general.csv", show_col_types = F)
+```
+
+# merging all bins
+```{r}
+asrt_all <- rbind(asrt_bins1_2, asrt_bins3_4, asrt_bins5_6) %>% write_csv("processed_data/asrt_all.csv")
+```
+
+# excluding participants
+```{r}
+to_exclude_all <- c(
+  "0ph4kxoj", "3yj6b4h0", "63z6t035", "6u66hyka", "bxz1h47q", "jgin3192", "jqnx9r4v", "jrf01pal", "t0xx7x9i", "vb5zhexh",  # failed on AQ attention test = 10
+  "5kxqaqov", "7ozph4zo", "b38pdihs", "bjgjzktt", "c51ye0of", "ixcvnna8", "oha9ku6d", "qfgl4ric", "sf4wxxfl", "wq95x6vk",  # low accuracy = 10
+  "og81fihm", "q2l07b9c",  # restarted ASRT = 2
+   "0lcgs7gr", "3bqwl0jj", "69yhsx5w", "7l2zo53o", "8c7wt90x", "bemwo57f", "bkdsjtfs", "e40h97cb", "gbvo9nrn", "gycppdq6", "hogiese2", "lb7vjngv", "mk3qjk9k", "mychxlnb", "ptywcizu", "tvfnqw23", "yrwfvsft", "z45d64cv", "h56lrud7",  # quit ASRT = 19
+   "0jzi1lm0", "16snqjzk", "17ox37sw", "1ki6ebat", "20ag2xli", "2lrrsgi6", "3341mkgq", "35174ahw", "3rsrjkky", "4pa1qjuw", "54c6u933", "68blqj6y", "7jq058u6", "95lns0zf", "9hbdbxgw", "9wctu8gu", "a8ivujkd", "avz00bwo", "b3q1m2le", "blxzug9z", "cv8tpy4u", "dnsmzbhb", "dy5x0rhr", "e260c445", "eakvtfdc", "ellwx9rd", "et5culbq", "g23mmrfq", "gf2qoo07", "gr5cbrwq", "h0asw03a", "hdpd91sm", "ia304by3", "jlaro2kk", "lq1rtrz8", "me1t6vv5", "mtu8p5sa", "n0jkqduu", "n2szmnl5", "o06rjn6t", "onaesdhm", "oszs6wd6", "p04o1y03", "r7uo6kot", "svrixmaf", "tlzx847n", "utvey5kc", "vu4w0fyr", "vxh4ur6x", "vysq3qau", "x8ur0rap", "x9nkv09r", "xueabdvq", "zr3yrq41", "zwzuyd36",  # diagnoses = 55
+  "5lm4glqo", "77bfjf3x", "7loy5j9t", "99d8l5gl", "b4saauq7", "hxfhs230", "lw419k1p", "mpn7aupi", "q6ns0zck", "w0u5nqql", "yk3unkzo", "yq52hu7k",  # medication = 12
+  "7u3abwgv", "8op4movi", "mb8fnbe5" # cons too long = 3
+  )
+
+asrt_all <- asrt_all %>% 
+  filter(!id %in% to_exclude_all)
+```
+
+# dropping non-first responses, practice trials, first two trials (X), and RTs over 1000 ms
+```{r}
+asrt_all <- asrt_all %>% 
+  filter(trial_type == "serial-reaction-time") %>% 
+  filter(first_response == 1) %>% 
+  filter(is_practice == 0) %>% 
+  write_csv("processed_data/asrt_all_unscreened.csv")
+
+asrt_all <- asrt_all %>% 
+  filter(triplet_type != "X", triplet_type != "T", triplet_type != "R") %>% 
+  filter(cumulative_rt < 1000) %>%
+  mutate(
+    correct = if_else(
+      is.na(correct),
+      0,
+      1
+    )
+  ) %>% 
+  select(-trial_type, -first_response, -is_practice) %>% 
+  rename(rt = cumulative_rt) %>%
+  write_csv("processed_data/asrt_all_screened_acc.csv")
+```
+
+# creating variable for bin number
+```{r}
+asrt_all <- asrt_all %>% 
+  mutate(
+    bin =
+      case_when(
+        between(block, 1, 5)   ~ 1,
+        between(block, 6, 10)  ~ 2,
+        between(block, 11, 15) ~ 3,
+        between(block, 16, 20) ~ 4,
+        between(block, 21, 25) ~ 5,
+        between(block, 26, 30) ~ 6,
+      )
+  )
+```
+
+# writing .csv that includes accuracy variable for accuracy analyses, then keeping only correct trials
+```{r}
+asrt_all %>% write_csv("processed_data/asrt_all_acc.csv")
+
+asrt_all_rt <- asrt_all %>%
+  filter(correct == 1) %>%
+  select(-correct) %>% 
+  write_csv("processed_data/asrt_all_rt.csv")
+```
+
+# computing learning scores
+
+## overall
+```{r}
+asrt_ls_median_rt <- asrt_all_rt %>% 
+  group_by(id, triplet_type) %>% 
+  summarise(median_rt = median(rt, na.rm = T)) %>% 
+  ungroup()
+
+asrt_ls_overall_rt_wide <- asrt_ls_median_rt %>% 
+  pivot_wider(names_from = triplet_type, values_from = median_rt)
+
+asrt_ls_overall_rt_wide <- asrt_ls_overall_rt_wide %>% 
+  mutate(
+    learning = L - H
+  ) %>% 
+  write_csv("processed_data/asrt_ls_overall_rt_wide.csv")
+
+asrt_ls_overall_rt_long <- asrt_ls_overall_rt_wide %>% 
+  pivot_longer(learning, values_to = "ls_overall_rt") %>% 
+  select(id, ls_overall_rt) %>% 
+  write_csv("processed_data/asrt_ls_overall_rt_long.csv")
+```
+
+## by bins
+```{r}
+asrt_ls_median_binwise_rt <- asrt_all_rt %>% 
+  group_by(id, bin, triplet_type) %>% 
+  summarise(median_rt = median(rt, na.rm = T)) %>% 
+  ungroup() %>% 
+  write_csv("processed_data/asrt_rt_binwise.csv")
+
+asrt_ls_binwise_rt_wide <- asrt_ls_median_binwise_rt %>% 
+  pivot_wider(names_from = c(triplet_type, bin), values_from = median_rt)
+
+asrt_ls_binwise_rt_wide <- asrt_ls_binwise_rt_wide %>% 
+  mutate(
+    bin_1 = L_1 - H_1,
+    bin_2 = L_2 - H_2,
+    bin_3 = L_3 - H_3,
+    bin_4 = L_4 - H_4,
+    bin_5 = L_5 - H_5,
+    bin_6 = L_6 - H_6
+  ) %>%
+  write_csv("processed_data/asrt_ls_binwise_rt_wide.csv")
+
+asrt_ls_binwise_rt_long <- asrt_ls_binwise_rt_wide %>% 
+  pivot_longer(c(bin_1:bin_6), names_sep = "_", names_to = c("name", "bin"), values_to = "ls_binwise_rt") %>%
+  mutate(bin = as.double(bin)) %>% 
+  select(id, bin, ls_binwise_rt) %>% 
+  write_csv("processed_data/asrt_ls_binwise_rt_long.csv")
+```
+
+# merging datasets for analyses
+```{r}
+asrt_overall_rt <- asrt_all_rt %>% 
+  group_by(id) %>% 
+  summarise(overall_median_rt = median(rt)) %>% 
+  ungroup()
+
+asrt_binwise_rt <- asrt_all_rt %>% 
+  group_by(id, bin) %>% 
+  summarise(bin_median_rt = median(rt)) %>% 
+  ungroup() %>% 
+  mutate(bin = as.double(bin))
+
+asrt_merged_rt <- asrt_ls_binwise_rt_long %>%
+  left_join(asrt_ls_overall_rt_long, by = "id") %>% 
+  left_join(asrt_overall_rt, by = "id") %>% 
+  left_join(asrt_binwise_rt, by = c("id", "bin")) %>% 
+  select(id, bin, overall_median_rt, bin_median_rt, ls_overall_rt, ls_binwise_rt)
+```
+
+# recoding and joining AQ data
+```{r}
+aq <- aq_raw %>% 
+  select(-c(...1, AQ_1, AQ_2 ,AQ_3 ,AQ_4 ,AQ_5 ,AQ_6 ,AQ_7 ,AQ_8,AQ_9,AQ_10,AQ_11,AQ_12,AQ_13,AQ_14,AQ_15,AQ_16,AQ_17,AQ_18,AQ_19,AQ_20, AQ_21,AQ_22,AQ_23,AQ_24,AQ_25,AQ_26,AQ_27,AQ_28,AQ_29,AQ_30,AQ_31,AQ_32,AQ_33,AQ_34,AQ_35,AQ_36,AQ_37,AQ_38,AQ_39,AQ_40,AQ_41,AQ_42,AQ_43,AQ_44,AQ_45,AQ_46,AQ_47,AQ_48,AQ_49,AQ_50, AQ_check, AQ_check.quantised))
+
+# renaming
+aq <- aq %>% rename_with(~ sub('.quantised$', '', .), starts_with("AQ_"))
+
+# recoding
+## items that score 1 point if response is 'definitely agree' (1) or 'slightly agree' (2):
+  # 2, 4, 5, 6, 7, 9, 12, 13, 16, 18, 19, 20, 21, 22, 23, 26, 33, 35, 39, 41, 42, 43, 45, 46
+## items that score 1 point if response is 'slightly disagree' (3) or 'definitely disagree' (4):
+  # 1, 3, 8, 10, 11, 14, 15, 17, 24, 25, 27, 28, 29, 30, 31, 32, 34, 36, 37, 38, 40, 44, 47, 48, 49, 50
+
+## responses 1 and 2:
+aq_1_2 <- aq %>% 
+  select(id = Participant.Public.ID, AQ_2, AQ_4, AQ_5, AQ_6, AQ_7, AQ_9, AQ_12, AQ_13, AQ_16, AQ_18, AQ_19, AQ_20, AQ_21, AQ_22, AQ_23, AQ_26, AQ_33, AQ_35, AQ_39, AQ_41, AQ_42, AQ_43, AQ_45, AQ_46) %>%
+  mutate(across(.cols = starts_with("AQ"), .fns = ~ case_when(
+    . == 1 ~ 1,
+    . == 2 ~ 1,
+    . == 3 ~ 0,
+    . == 4 ~ 0,
+    TRUE ~ .
+  )))
+
+## responses 3 and 4:
+aq_3_4 <- aq %>% 
+  select(id = Participant.Public.ID, AQ_1, AQ_3, AQ_8, AQ_10, AQ_11, AQ_14, AQ_15, AQ_17, AQ_24, AQ_25, AQ_27, AQ_28, AQ_29, AQ_30, AQ_31, AQ_32, AQ_34, AQ_36, AQ_37, AQ_38, AQ_40, AQ_44, AQ_47, AQ_48, AQ_49, AQ_50) %>% 
+  mutate(across(.cols = starts_with("AQ"), .fns = ~ case_when(
+    . == 1 ~ 0,
+    . == 2 ~ 0,
+    . == 3 ~ 1,
+    . == 4 ~ 1,
+    TRUE ~ .
+  )))
+
+aq <- aq_1_2 %>%
+  left_join(aq_3_4, by = "id") %>%
+  mutate(
+    aq_sum = rowSums(select(., AQ_2:AQ_50)), # total score
+    aq_social = rowSums(select(., AQ_1, AQ_11, AQ_13, AQ_15, AQ_22, AQ_36, AQ_44, AQ_45, AQ_47, AQ_48)), # social skill
+    aq_attent_sw = rowSums(select(., AQ_2, AQ_4, AQ_10, AQ_16, AQ_25, AQ_32, AQ_34, AQ_37, AQ_43, AQ_46)), # attention switching
+    aq_attent_det = rowSums(select(., AQ_5, AQ_6, AQ_9, AQ_12, AQ_19, AQ_23, AQ_28, AQ_29, AQ_30, AQ_49)), # attention to detail
+    aq_comm = rowSums(select(., AQ_7, AQ_17, AQ_18, AQ_26, AQ_27, AQ_31, AQ_33, AQ_35, AQ_38, AQ_39)), # communication
+    aq_imag = rowSums(select(., AQ_3, AQ_8, AQ_14, AQ_20, AQ_21, AQ_24, AQ_40, AQ_41, AQ_42, AQ_50)) # imagination
+) %>% 
+  select(id, aq_sum:aq_imag) %>% 
+  write_csv("processed_data/aq_recoded.csv")
+
+asrt_merged_rt <- asrt_merged_rt %>% 
+  left_join(aq, by = "id") %>% 
+  select(id, aq_sum, everything())
+
+# aq median split
+aq_median <- asrt_merged_rt %>% 
+  summarise(median_aq = median(aq_sum),
+            mad = mad(aq_sum)
+            )
+aq_median
+  # median = 17
+  # median absolute deviation = 5.93
+
+asrt_merged_rt <- asrt_merged_rt %>% 
+  mutate(aq_group = 
+    if_else(
+      aq_sum <= 17,
+      1,
+      2
+    )
+  ) %>% mutate(aq_group = factor(aq_group, levels = c(1, 2), labels = c("Lower AQ", "Higher AQ"))) %>% 
+  select(id, aq_sum, aq_group, everything())
+
+# group sizes
+asrt_merged_rt %>% 
+  select(id, aq_group) %>%
+  distinct() %>%
+  select(aq_group) %>% 
+  table()
+
+# id and AQ
+asrt_merged_rt %>% 
+  select(id, aq_sum, aq_group, aq_social:aq_imag) %>% 
+  distinct() %>% 
+  mutate(aq_group = as.numeric(aq_group)) %>%
+  write_csv("processed_data/id_aq.csv")
+
+# joining general data
+asrt_merged_rt <- asrt_merged_rt %>% 
+  left_join(general, by = "id") %>% 
+  select(id, gender, age, everything())
+
+asrt_merged_rt %>%
+  mutate(aq_group = as.numeric(aq_group)) %>%
+  write_csv("processed_data/asrt_merged_rt.csv")
+```

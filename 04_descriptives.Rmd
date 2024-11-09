@@ -1,0 +1,128 @@
+---
+title: "04_descriptives"
+author: "Flora Hann"
+date: "2024-11-07"
+output: html_document
+---
+
+# setup and loading packages
+```{r}
+options(scipen = 999, digits = 15)
+
+suppressPackageStartupMessages(library(janitor))
+suppressPackageStartupMessages(library(tidyverse))
+```
+
+# importing data
+```{r}
+# general
+general <- read_csv("processed_data/general.csv", show_col_types = F)
+
+# AQ
+id_aq <- read_csv("processed_data/id_aq.csv", show_col_types = F) %>% clean_names()
+
+# ASRT
+asrt_merged_rt <- read_csv("processed_data/asrt_merged_rt.csv", show_col_types = F) %>% mutate(aq_group = factor(aq_group, levels = c(1, 2), labels = c("Lower AQ", "Higher AQ")))
+asrt_all_unscreened <- read_csv("processed_data/asrt_all_unscreened.csv", show_col_types = F) %>% clean_names()
+asrt_all_screened_acc <- read_csv("processed_data/asrt_all_screened_acc.csv", show_col_types = F) %>% clean_names()
+asrt_all_screened_rt <- read_csv("processed_data/asrt_all_rt.csv", show_col_types = F) %>% clean_names()
+```
+
+# merging dataets
+```{r}
+general <- id_aq %>% 
+  left_join(general, by = "id")
+```
+
+# sample demographics
+## number and age of participants
+```{r}
+  
+general %>% 
+  select(id, age) %>% 
+  summarise(N         = n(),
+            Mean      = round(mean(age, na.rm = T), digits = 2),
+            Median    = round(median(age, na.rm = T), digits = 2),
+            SD        = round(sd(age, na.rm = T), digits = 2),
+            Range_min = min(age, na.rm = T),
+            Range_max = max(age, na.rm = T)
+  )
+```
+
+## gender
+```{r}
+general %>% 
+  select(gender) %>% 
+  table()
+  
+general %>%
+  select(gender) %>% 
+  table() %>% 
+  prop.table() %>% `*`(100) %>% round(2)
+```
+
+## AQ
+```{r}
+asrt_merged_rt %>% 
+  select(id, aq_sum) %>%
+  reframe(
+    mean = mean(aq_sum),
+    median = median(aq_sum),
+    sd = sd(aq_sum),
+    range = range(aq_sum)
+    )
+```
+
+# trial removals
+## removed for RT analysis
+```{r}
+asrt_filtered_rt <- asrt_all_unscreened %>%
+  anti_join(asrt_all_screened_rt, by = c("id", "datetime", "block", "trial_number")) %>% 
+  select(datetime, id)
+
+# percentage of trials removed
+nrow(asrt_filtered_rt) / nrow(asrt_all_unscreened) * 100
+
+# count by id
+asrt_filtered_rt_count <- asrt_filtered_rt %>% 
+  count(id) %>% 
+  mutate(
+    n_perc = n / nrow(asrt_all_unscreened) * 100
+  )
+
+asrt_filtered_rt_count %>%
+  summarize(
+    Mean = round(mean(n_perc, na.rm = T), digits = 2),
+    Median = round(median(n_perc, na.rm = T), digits = 2),
+    SD = round(sd(n_perc, na.rm = T), digits = 2),
+    Range_min = min(n_perc, na.rm = T),
+    Range_max = max(n_perc, na.rm = T)
+  )
+```
+
+# trial removals
+## removed for ACC analysis
+```{r}
+asrt_filtered_acc <- asrt_all_unscreened %>%
+  anti_join(asrt_all_screened_acc, by = c("id", "datetime", "block", "trial_number")) %>% 
+  select(datetime, id)
+
+# percentage of trials removed
+nrow(asrt_filtered_acc) / nrow(asrt_all_unscreened) * 100
+
+# count by id
+asrt_filtered_acc_count <- asrt_filtered_acc %>% 
+  count(id) %>% 
+  mutate(
+    n_perc = n / nrow(asrt_all_unscreened) * 100
+  )
+
+asrt_filtered_acc_count %>%
+  summarize(
+    Mean = round(mean(n_perc, na.rm = T), digits = 2),
+    Median = round(median(n_perc, na.rm = T), digits = 2),
+    SD = round(sd(n_perc, na.rm = T), digits = 3),
+    Range_min = min(n_perc, na.rm = T),
+    Range_max = max(n_perc, na.rm = T)
+  )
+```

@@ -1,0 +1,180 @@
+---
+title: "07_models_speed_accuracy"
+author: "Flora Hann"
+date: "2024-11-07"
+output: html_document
+---
+
+# setup and loading packages
+```{r}
+options(scipen = 999, digits = 15)
+
+suppressPackageStartupMessages(library(janitor))
+suppressPackageStartupMessages(library(performance))
+suppressPackageStartupMessages(library(sjPlot))
+suppressPackageStartupMessages(library(afex))
+suppressPackageStartupMessages(library(emmeans))
+suppressPackageStartupMessages(library(tidyverse))
+```
+
+# importing data
+```{r}
+# ASRT
+asrt_merged_rt <- read_csv("processed_data/asrt_merged_rt.csv", show_col_types = F) 
+asrt_merged_acc <- read_csv("processed_data/asrt_merged_acc.csv", show_col_types = F) 
+```
+
+# prepocessing data for models
+```{r}
+# preprocessing RT data
+rt_binwise <- asrt_merged_rt %>% 
+  select(id, aq_sum, aq_group, bin, overall_median_rt, bin_median_rt) %>% 
+  distinct() %>%
+  mutate(
+    bin = factor(bin)
+  )
+
+# preprocessing accuracy data and merging with RT data
+rt_acc_binwise <- asrt_merged_acc %>% 
+  mutate(
+    bin = factor(bin)
+    ) %>% 
+  select(id, bin, overall_mean_acc, bin_mean_acc) %>% 
+  distinct() %>% 
+  left_join(rt_binwise, by = c("id", "bin")) %>%
+  select(id, aq_sum, aq_group, bin, overall_median_rt, bin_median_rt, overall_mean_acc, bin_mean_acc)
+
+# centering AQ
+rt_acc_binwise <- rt_acc_binwise %>%
+  mutate(
+    aq_centered = scale(aq_sum, center = T, scale = F)
+  )
+
+# converting accuracy to %
+rt_acc_binwise <- rt_acc_binwise %>% 
+  mutate(
+    bin_mean_acc_perc = bin_mean_acc * 100
+  )
+
+# computing bias score
+  # positive scores = more accurate; negative scores = faster
+  # subtracting a within-participant z-scored error rate from a within-participant z-scored RT score
+rt_acc_binwise <- rt_acc_binwise %>% 
+  group_by(id) %>%
+  mutate(
+    bin_median_rt_scaled = scale(bin_median_rt),
+    bin_mean_error_rate_scaled = scale(1 - bin_mean_acc),
+    bias = bin_median_rt_scaled - bin_mean_error_rate_scaled
+  ) %>% 
+  ungroup() %>% 
+  mutate(
+    aq_centered = as.vector(aq_centered),
+    bin_median_rt_scaled = as.vector(bin_median_rt_scaled),
+    bin_mean_error_rate_scaled = as.vector(bin_mean_error_rate_scaled),
+    bias = as.vector(bias)
+  )
+
+rt_acc_binwise %>% write_csv("processed_data/rt_acc_binwise.csv")
+```
+
+# models
+## model for speed/accuracy trade-off
+```{r}
+# fitting model
+sat_model <- 
+  mixed(bin_median_rt ~ bin * bin_mean_acc_perc + (1 | id), data = rt_acc_binwise, check_contrasts = F, method = "S")
+sat_model
+
+tab_model(sat_model$full_model,
+          df.method = "s",
+          show.se = F,
+          show.stat = T,
+          show.df = T,
+          digits = 3,
+          digits.re = 3,
+          string.pred = "Terms",
+          string.est = "b",
+          string.ci = "95% CI",
+          string.stat = "t",
+          col.order = c("est", "se", "ci", "stat", "df.error", "p")
+)
+
+# post hoc
+emm_options(lmer.df = "Satterthwaite",lmerTest.limit = 290682)
+
+  ## accuracy main effect
+  high_acc <- mean(rt_acc_binwise$bin_mean_acc_perc) + 1 * sd(rt_acc_binwise$bin_mean_acc_perc)
+  low_acc <- mean(rt_acc_binwise$bin_mean_acc_perc) - 1 * sd(rt_acc_binwise$bin_mean_acc_perc)
+
+    ### low accuracy
+    emm_acc_low <- emmeans(sat_model, ~ bin_mean_acc_perc, type = 'response', at = list(bin_mean_acc_perc = c(low_acc)))
+    emm_acc_low
+
+    ### high accuracy
+    emm_acc_high <- emmeans(sat_model, ~ bin_mean_acc_perc, type = 'response', at = list(bin_mean_acc_perc = c(high_acc)))
+    emm_acc_high
+
+  emm_acc <- emmeans(sat_model, ~ bin_mean_acc_perc, at = list(bin_mean_acc_perc = c(low_acc, high_acc)), type = 'response')
+
+  pairs(regrid(emm_acc),adjust = "sidak")
+
+  ## bin main effect
+  emm_bin <- emmeans(sat_model, ~ bin, type = 'response')
+  emm_bin
+  pairs(regrid(emm_bin),adjust = "sidak")
+
+# assumptions
+car::qqPlot(resid(sat_model$full_model))
+plot(sat_model$full_model)
+plot_model(sat_model$full_model, type = "diag")
+check_normality(sat_model$full_model)
+check_collinearity(sat_model$full_model)
+```
+
+## model for speed/accuracy trade-off and AQ
+```{r}
+# fitting model
+sat_aq_model <-
+  mixed(bias ~ aq_centered * bin + (1 | id), data = rt_acc_binwise, method = "S", check_contrasts = F)
+sat_aq_model
+
+tab_model(sat_aq_model$full_model,
+          df.method = "s",
+          show.se = F,
+          show.stat = T,
+          show.df = T,
+          digits = 3,
+          digits.re = 3,
+          string.pred = "Terms",
+          string.est = "b",
+          string.ci = "95% CI",
+          string.stat = "t",
+          col.order = c("est", "se", "ci", "stat", "df.error", "p")
+)
+
+# post hoc
+emm_options(lmer.df = "Satterthwaite",lmerTest.limit = 290682)
+
+  ## bin main effect
+  emm_bin <- emmeans(sat_aq_model, ~ bin, type = 'response')
+  emm_bin
+  pairs(regrid(emm_bin),adjust = "sidak")
+
+  ## AQ * bin interaction
+  high_aq <- mean(rt_acc_binwise$aq_centered) + 1 * sd(rt_acc_binwise$aq_centered)
+  low_aq <- mean(rt_acc_binwise$aq_centered) - 1 * sd(rt_acc_binwise$aq_centered)
+
+emm_aq <- emmeans(sat_aq_model, ~ bin * aq_centered, at = list(aq_centered = c(low_aq, high_aq)), type = 'response')
+emm_aq
+
+pairs(regrid(emm_aq),adjust = "sidak")
+
+# assumptions
+car::qqPlot(resid(sat_aq_model$full_model))
+plot(sat_aq_model$full_model)
+plot_model(sat_aq_model$full_model, type = "diag")
+check_normality(sat_aq_model$full_model)
+check_collinearity(sat_aq_model$full_model)
+```
+
+

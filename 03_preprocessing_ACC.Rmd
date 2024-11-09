@@ -1,0 +1,127 @@
+---
+title: "02_preprocessing_ACC"
+author: "Flora Hann"
+date: "2023-10-26"
+output: html_document
+editor_options: 
+  chunk_output_type: inline
+---
+
+# setup and loading packages
+```{r}
+options(scipen = 999, digits = 15)
+
+suppressPackageStartupMessages(library(janitor))
+suppressPackageStartupMessages(library(tidyverse))
+```
+
+# importing data
+```{r}
+# ASRT
+asrt_all_acc <- read_csv("processed_data/asrt_all_acc.csv", show_col_types = F)
+
+# AQ
+aq_recoded <- read_csv("processed_data/aq_recoded.csv", show_col_types = F)
+
+# general
+general <- read_csv("processed_data/general.csv", show_col_types = F)
+```
+
+# computing learning scores
+
+## overall
+```{r}
+asrt_ls_mean_acc <- asrt_all_acc %>% 
+  group_by(id, triplet_type) %>% 
+  summarise(mean_acc = mean(correct, na.rm = T)) %>% 
+  ungroup()
+
+asrt_ls_acc_wide <- asrt_ls_mean_acc %>% 
+  pivot_wider(names_from = triplet_type, values_from = mean_acc)
+
+asrt_ls_acc_wide <- asrt_ls_acc_wide %>% 
+  mutate(
+    learning = H - L
+  ) %>% 
+  write_csv("processed_data/asrt_ls_overall_acc_wide.csv")
+
+asrt_ls_overall_acc_long <- asrt_ls_acc_wide %>% 
+  pivot_longer(learning, values_to = "ls_overall_acc") %>% 
+  select(id, ls_overall_acc) %>%
+  write_csv("processed_data/asrt_ls_overall_acc_long.csv")
+```
+
+
+## by bins
+```{r}
+asrt_ls_means_binwise_acc <- asrt_all_acc %>% 
+  group_by(id, bin, triplet_type) %>% 
+  summarise(mean_acc = mean(correct, na.rm = T)) %>% 
+  ungroup() %>% 
+  write_csv("processed_data/asrt_acc_binwise.csv")
+
+asrt_ls_binwise_acc_wide <- asrt_ls_means_binwise_acc %>% 
+  pivot_wider(names_from = c(triplet_type, bin), values_from = mean_acc)
+
+asrt_ls_binwise_acc_wide <- asrt_ls_binwise_acc_wide %>% 
+  mutate(
+    bin_1 = H_1 - L_1,
+    bin_2 = H_2 - L_2,
+    bin_3 = H_3 - L_3,
+    bin_4 = H_4 - L_4,
+    bin_5 = H_5 - L_5,
+    bin_6 = H_6 - L_6
+  ) %>%
+  write_csv("processed_data/asrt_ls_binwise_acc_wide.csv")
+
+asrt_ls_binwise_acc_long <- asrt_ls_binwise_acc_wide %>% 
+  pivot_longer(c(bin_1:bin_6), names_sep = "_", names_to = c("name", "bin"), values_to = "ls_binwise_acc") %>%
+  mutate(bin = as.double(bin)) %>%
+  select(id, bin, ls_binwise_acc) %>%
+  write_csv("processed_data/asrt_ls_binwise_acc_long.csv")
+```
+
+# merging datasets for analyses
+```{r}
+asrt_overall_acc <- asrt_all_acc %>% 
+  group_by(id) %>% 
+  summarise(overall_mean_acc = mean(correct)) %>% 
+  ungroup()
+
+asrt_binwise_acc <- asrt_all_acc %>% 
+  group_by(id, bin) %>% 
+  summarise(bin_mean_acc = mean(correct)) %>% 
+  ungroup() %>% 
+  mutate(bin = as.double(bin))
+
+asrt_merged_acc <- asrt_ls_binwise_acc_long %>%
+  left_join(asrt_ls_overall_acc_long, by = "id") %>% 
+  left_join(asrt_overall_acc, by = "id") %>% 
+  left_join(asrt_binwise_acc, by = c("id", "bin")) %>% 
+  select(id, bin, overall_mean_acc, bin_mean_acc, ls_overall_acc, ls_binwise_acc)
+```
+
+# joining AQ data and median splitting
+```{r}
+asrt_merged_acc <- asrt_merged_acc %>% 
+  left_join(aq_recoded, by = "id") %>% 
+  select(id, aq_sum, everything()) %>% 
+  mutate(
+    aq_group =
+      if_else(
+        aq_sum <= 17,
+        1,
+        2
+      )
+  ) %>% 
+  select(id, aq_sum, aq_group, everything())
+```
+
+# joining general data
+```{r}
+asrt_merged_acc <- asrt_merged_acc %>% 
+  left_join(general, by = "id") %>% 
+  select(id, gender, age, everything())
+
+asrt_merged_acc %>% write_csv("processed_data/asrt_merged_acc.csv")
+```
