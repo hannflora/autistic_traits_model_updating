@@ -17,7 +17,7 @@ suppressPackageStartupMessages(library(extrafont))
 suppressPackageStartupMessages(library(tidyverse))
 
 loadfonts(device = "all")
-font_add(family = "Arial", regular = "Arial.ttf")
+font_add(family = "Arial", regular = "fonts/Arial.ttf")
 showtext_auto()
 ```
 
