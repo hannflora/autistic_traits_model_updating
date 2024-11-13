@@ -81,7 +81,7 @@ line_plot_rt_learning
 scatter_plot_rt_learning <- asrt_merged_rt_learning %>% 
   ggplot(aes(aq_sum, ls_binwise_rt, color = aq_sum)) +
   geom_jitter() +
-  geom_smooth(method = lm, color = "black", lwd = 0.6) +
+  geom_smooth(method = lm, color = "black", lwd = 0.6, alpha = 1) +
   facet_wrap(~ bin) +
   scale_color_gradient(low = "#F3C22D", high = "#3C96DF") +
   theme_classic(base_size = 18) +
@@ -126,7 +126,7 @@ line_plot_acc_learning
 scatter_plot_acc_learning <- asrt_merged_acc_learning %>% 
   ggplot(aes(aq_sum, 100 * ls_binwise_acc, color = aq_sum)) +
   geom_jitter() +
-  geom_smooth(method = lm, color = "black", lwd = 0.6) +
+  geom_smooth(method = lm, color = "black", lwd = 0.6, alpha = 1) +
   facet_wrap(~ bin) +
   scale_color_gradient(low = "#F3C22D", high = "#3C96DF") +
   theme_classic(base_size = 18) +
@@ -171,7 +171,7 @@ line_plot_rt_updating
 scatter_plot_rt_updating <- asrt_merged_rt_updating %>% 
   ggplot(aes(aq_sum, ls_binwise_rt, color = aq_sum)) +
   geom_jitter() +
-  geom_smooth(method = lm, color = "black", lwd = 0.6) +
+  geom_smooth(method = lm, color = "black", lwd = 0.6, alpha = 1) +
   facet_wrap(~ bin) +
   scale_color_gradient(low = "#F3C22D", high = "#3C96DF") +
   theme_classic(base_size = 18) +
@@ -215,7 +215,7 @@ line_plot_acc_updating
 scatter_plot_acc_updating <- asrt_merged_acc_updating %>% 
   ggplot(aes(aq_sum, 100 * ls_binwise_acc, color = aq_sum)) +
   geom_jitter() +
-  geom_smooth(method = lm, color = "black", lwd = 0.6) +
+  geom_smooth(method = lm, color = "black", lwd = 0.6, alpha = 1) +
   facet_wrap(~ bin) +
   scale_color_gradient(low = "#F3C22D", high = "#3C96DF") +
   theme_classic(base_size = 18) +
@@ -258,7 +258,7 @@ line_plot_sat
 scatter_plot_sat <- rt_acc_binwise %>% 
   ggplot(aes(aq_sum, bias, color = aq_sum)) +
   geom_jitter() +
-  geom_smooth(method = lm, color = "black", lwd = 0.6) +
+  geom_smooth(method = lm, color = "black", lwd = 0.6, alpha = 1) +
   facet_wrap(~bin) +
   scale_color_gradient(low = "#F3C22D", high = "#3C96DF") +
   theme_classic(base_size = 18) +
